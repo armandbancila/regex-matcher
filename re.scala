@@ -2,12 +2,12 @@ abstract class Rexp
 case object ZERO extends Rexp
 case object ONE extends Rexp
 case class CHAR(c: Char) extends Rexp
-case class ALT(r1: Rexp, r2: Rexp) extends Rexp   // alternative 
+case class ALT(r1: Rexp, r2: Rexp) extends Rexp   // alternative
 case class SEQ(r1: Rexp, r2: Rexp) extends Rexp   // sequence
 case class STAR(r: Rexp) extends Rexp             // star
 
-import scala.language.implicitConversions    
-import scala.language.reflectiveCalls 
+import scala.language.implicitConversions
+import scala.language.reflectiveCalls
 
 def charlist2rexp(s: List[Char]): Rexp = s match {
   case Nil => ONE
