@@ -5,6 +5,7 @@ case class CHAR(c: Char) extends Rexp
 case class ALT(r1: Rexp, r2: Rexp) extends Rexp
 case class SEQ(r1: Rexp, r2: Rexp) extends Rexp
 case class STAR(r: Rexp) extends Rexp
+case class NTIMES(r: Rexp, n: Int) extends Rexp
 
 // implicit type conversion stuff
 import scala.language.implicitConversions
@@ -32,62 +33,55 @@ implicit def stringOps (s: String) = new {
   def ~ (r: String) = SEQ(s, r)
 }
 
-// test if regex matches the empty string
-def nullable (r: Rexp) : Boolean = r match {
+// nullable(r): test if regex matches the empty string
+def nullable (r: Rexp): Boolean = r match {
   case ZERO => false
   case ONE => true
   case CHAR(_) => false
   case ALT(r1, r2) => nullable(r1) || nullable(r2)
   case SEQ(r1, r2) => nullable(r1) && nullable(r2)
   case STAR(_) => true
+  case NTIMES(r, i) => if (i == 0) true else nullable(r)
 }
 
-def der (c: Char, r: Rexp) : Rexp = r match {
+// der(c, r): derivative of regex w.r.t. a character
+// finds the regex that matches {s | c::s, s in L(r)}
+def der (c: Char, r: Rexp): Rexp = r match {
   case ZERO => ZERO
   case ONE => ZERO
-  case CHAR(d) => {
-    if (c == d) ONE
-    else ZERO
-  }
+  case CHAR(d) => if (c == d) ONE else ZERO
   case ALT(r1, r2) => ALT(der(c, r1), der(c, r2))
   case SEQ(r1, r2) => {
-    if (nullable(r1)) {
-      ALT(SEQ((der(c, r1)), r2), der(c, r2))
-    }
+    if (nullable(r1)) ALT(SEQ((der(c, r1)), r2), der(c, r2))
     else SEQ(der(c, r1), r2)
   }
   case STAR(r1) => SEQ(der(c, r1), STAR(r1))
+  case NTIMES(r1, i) =>
+    if (i == 0) ZERO else der(c, SEQ(r1, NTIMES(r1, i - 1)))
 }
 
-def simp(r: Rexp) : Rexp = r match {
+def simp(r: Rexp): Rexp = r match {
   case ALT(r1, r2) => (simp(r1), simp(r2)) match {
-    case (x, ZERO) => x
-    case (ZERO, x) => x
-    case (x, y) if (x == y) => x
-    case (x, y) => ALT(x, y)
+    case (ZERO, r2s) => r2s
+    case (r1s, ZERO) => r1s
+    case (r1s, r2s) => if (r1s == r2s) r1s else ALT(r1s, r2s)
   }
   case SEQ(r1, r2) => (simp(r1), simp(r2)) match {
-    case (_, ZERO) => ZERO
     case (ZERO, _) => ZERO
-    case (x, ONE) => x
-    case (ONE, x) => x
-    case (x, y) => SEQ(x, y)
+    case (_, ZERO) => ZERO
+    case (ONE, r2s) => r2s
+    case (r1s, ONE) => r1s
+    case (r1s, r2s) => SEQ(r1s, r2s)
   }
-  case _ => r
+  case r => r
 }
 
-def ders (s: List[Char], r: Rexp) : Rexp = s match {
-  case Nil => {
-    r
-  }
-  case c::cs => {
-    ders(cs, simp(der(c, r)))
-  }
+def ders (s: List[Char], r: Rexp): Rexp = s match {
+  case Nil => r
+  case c::cs => ders(cs, simp(der(c, r)))
 }
 
-def matcher(r: Rexp, s: String): Boolean = {
-  nullable(ders(s.toList, r))
-}
+def matcher(r: Rexp, s: String): Boolean = nullable(ders(s.toList, r))
 
 def replace(r: Rexp, s1: String, s2: String): String = {
   if (!s1.isEmpty){
@@ -106,8 +100,15 @@ def replace(r: Rexp, s1: String, s2: String): String = {
 }
 
 val EVIL = SEQ(STAR(STAR(CHAR('a'))), CHAR('b'))
+val TESTNTIMES = NTIMES(CHAR('a'), 5)
+val TESTNTIMESZERO = NTIMES(CHAR('a'), 0)
 println(matcher(EVIL, "a" * 1000 ++ "b"))
-println(matcher(EVIL, "a" * 1000))
+println(!matcher(EVIL, "a" * 1000))
+println(!matcher(TESTNTIMES, ""))
+println(matcher(TESTNTIMES, "a" * 5))
+println(!matcher(TESTNTIMES, "a" * 6))
+println(matcher(TESTNTIMESZERO, ""))
+println(!matcher(TESTNTIMESZERO, "a" * 10))
 
 def time_needed[T](i: Int, code: => T) = {
   val start = System.nanoTime()
