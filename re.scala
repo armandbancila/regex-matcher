@@ -6,6 +6,7 @@ case class ALT(r1: Rexp, r2: Rexp) extends Rexp
 case class SEQ(r1: Rexp, r2: Rexp) extends Rexp
 case class STAR(r: Rexp) extends Rexp
 
+// implicit type conversion stuff
 import scala.language.implicitConversions
 import scala.language.reflectiveCalls
 
@@ -31,12 +32,13 @@ implicit def stringOps (s: String) = new {
   def ~ (r: String) = SEQ(s, r)
 }
 
+// test if regex matches the empty string
 def nullable (r: Rexp) : Boolean = r match {
   case ZERO => false
   case ONE => true
   case CHAR(_) => false
-  case ALT(r1, r2) => nullable(r1) | nullable(r2)
-  case SEQ(r1, r2) => nullable(r1) & nullable(r2)
+  case ALT(r1, r2) => nullable(r1) || nullable(r2)
+  case SEQ(r1, r2) => nullable(r1) && nullable(r2)
   case STAR(_) => true
 }
 
