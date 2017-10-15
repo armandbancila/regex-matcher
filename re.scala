@@ -148,3 +148,20 @@ def replace(r: Rexp, s1: String, s2: String): String = {
 		""
 	}
 }
+
+val EVIL = SEQ(STAR(STAR(CHAR('a'))), CHAR('b'))
+println(matcher(EVIL, "a" * 1000 ++ "b"))
+println(matcher(EVIL, "a" * 1000))
+
+
+def time_needed[T](i: Int, code: => T) = {
+  val start = System.nanoTime()
+  for (j <- 1 to i) code
+  val end = System.nanoTime()
+  (end - start)/(i * 1.0e9)
+}
+
+for (i <- 1 to 5000001 by 500000) {
+  println(i + " " + "%.5f".format(time_needed(2, matcher(EVIL, "a" * i))))
+}
+
