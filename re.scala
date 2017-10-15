@@ -32,93 +32,46 @@ implicit def stringOps (s: String) = new {
 }
 
 def nullable (r: Rexp) : Boolean = r match {
-  case ZERO => {
-    false
-  }
-  case ONE => {
-    true
-  }
-  case CHAR(_) => {
-    false
-  }
-  case ALT(r1, r2) => {
-    nullable(r1) | nullable(r2)
-  }
-  case SEQ(r1, r2) => {
-    nullable(r1) & nullable(r2)
-  }
-  case STAR(_) => {
-    true
-  }
+  case ZERO => false
+  case ONE => true
+  case CHAR(_) => false
+  case ALT(r1, r2) => nullable(r1) | nullable(r2)
+  case SEQ(r1, r2) => nullable(r1) & nullable(r2)
+  case STAR(_) => true
 }
 
 def der (c: Char, r: Rexp) : Rexp = r match {
-  case ZERO => {
-    ZERO
-  }
-  case ONE => {
-    ZERO
-  }
+  case ZERO => ZERO
+  case ONE => ZERO
   case CHAR(d) => {
-    if (c == d) {
-      ONE
-    }
-    else {
-      ZERO
-    }
+    if (c == d) ONE
+    else ZERO
   }
-  case ALT(r1, r2) => {
-    ALT(der(c, r1), der(c, r2))
-  }
+  case ALT(r1, r2) => ALT(der(c, r1), der(c, r2))
   case SEQ(r1, r2) => {
     if (nullable(r1)) {
       ALT(SEQ((der(c, r1)), r2), der(c, r2))
     }
-    else {
-      SEQ(der(c, r1), r2)
-    }
-
+    else SEQ(der(c, r1), r2)
   }
-  case STAR(r1) => {
-    SEQ(der(c, r1), STAR(r1))
-  }
+  case STAR(r1) => SEQ(der(c, r1), STAR(r1))
 }
 
 def simp(r: Rexp) : Rexp = r match {
   case ALT(r1, r2) => (simp(r1), simp(r2)) match {
-    case (x, ZERO) => {
-      x
-    }
-    case (ZERO, x) => {
-      x
-    }
-    case (x, y) if (x == y) => {
-      x
-    }
-    case (x, y) => {
-      ALT(x, y)
-    }
+    case (x, ZERO) => x
+    case (ZERO, x) => x
+    case (x, y) if (x == y) => x
+    case (x, y) => ALT(x, y)
   }
   case SEQ(r1, r2) => (simp(r1), simp(r2)) match {
-    case (_, ZERO) => {
-      ZERO
-    }
-    case (ZERO, _) => {
-      ZERO
-    }
-    case (x, ONE) => {
-      x
-    }  
-    case (ONE, x) => {
-      x
-    }
-    case (x, y) => {
-      SEQ(x, y)
-    }
+    case (_, ZERO) => ZERO
+    case (ZERO, _) => ZERO
+    case (x, ONE) => x
+    case (ONE, x) => x
+    case (x, y) => SEQ(x, y)
   }
-  case _ => {
-    r
-  }
+  case _ => r
 }
 
 def ders (s: List[Char], r: Rexp) : Rexp = s match {
