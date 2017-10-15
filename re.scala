@@ -107,7 +107,6 @@ val EVIL = SEQ(STAR(STAR(CHAR('a'))), CHAR('b'))
 println(matcher(EVIL, "a" * 1000 ++ "b"))
 println(matcher(EVIL, "a" * 1000))
 
-
 def time_needed[T](i: Int, code: => T) = {
   val start = System.nanoTime()
   for (j <- 1 to i) code
