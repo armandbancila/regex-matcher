@@ -7,7 +7,6 @@ case class SEQ(r1: Rexp, r2: Rexp) extends Rexp
 case class STAR(r: Rexp) extends Rexp
 case class NTIMES(r: Rexp, n: Int) extends Rexp
 
-// implicit type conversion stuff
 import scala.language.implicitConversions
 import scala.language.reflectiveCalls
 
