@@ -1,12 +1,24 @@
 abstract class Rexp
+// basic regular expressions
 case object ZERO extends Rexp
 case object ONE extends Rexp
 case class CHAR(c: Char) extends Rexp
 case class ALT(r1: Rexp, r2: Rexp) extends Rexp
 case class SEQ(r1: Rexp, r2: Rexp) extends Rexp
 case class STAR(r: Rexp) extends Rexp
+// extended regular expressions
+case class CHARSET(x: Set[Char]) extends Rexp
+case class PLUS(r: Rexp) extends Rexp
+case class OPT(r: Rexp) extends Rexp
 case class NTIMES(r: Rexp, n: Int) extends Rexp
+case class UPTO(r: Rexp, n: Int) extends Rexp
+case class ATLEAST(r: Rexp, n: Int) extends Rexp
+case class BETWEEN(r: Rexp, n: Int, m: Int) extends Rexp
+case class NOT(r: Rexp) extends Rexp
+case class CFUN(f: Char => Boolean) extends Rexp
+case object ALL extends Rexp
 
+// implicit type conversion stuff
 import scala.language.implicitConversions
 import scala.language.reflectiveCalls
 
@@ -32,7 +44,7 @@ implicit def stringOps (s: String) = new {
   def ~ (r: String) = SEQ(s, r)
 }
 
-// nullable(r): test if regex matches the empty string
+// test if regex matches the empty string
 def nullable (r: Rexp): Boolean = r match {
   case ZERO => false
   case ONE => true
@@ -40,25 +52,56 @@ def nullable (r: Rexp): Boolean = r match {
   case ALT(r1, r2) => nullable(r1) || nullable(r2)
   case SEQ(r1, r2) => nullable(r1) && nullable(r2)
   case STAR(_) => true
-  case NTIMES(r, i) => if (i == 0) true else nullable(r)
+  case CHARSET(_) => false
+  case PLUS(r) => nullable(r)
+  case OPT(_) => true
+  case NTIMES(r, n) => if (n == 0) true else nullable(r)
+  case UPTO(_, _) => true
+  case ATLEAST(r, n) => if (n == 0) true else nullable(r)
+  case BETWEEN(r, n, m) => if (n == 0) true else nullable(r)
+  case NOT(r) => !nullable(r)
+  case CFUN(f) => false
+  case ALL => false
 }
 
-// der(c, r): derivative of regex w.r.t. a character
+// derivative of a regex w.r.t. a character
 // finds the regex that matches {s | c::s, s in L(r)}
 def der (c: Char, r: Rexp): Rexp = r match {
   case ZERO => ZERO
   case ONE => ZERO
-  case CHAR(d) => if (c == d) ONE else ZERO
+  case CHAR(d) => der(c, CFUN(Set(d)))
   case ALT(r1, r2) => ALT(der(c, r1), der(c, r2))
   case SEQ(r1, r2) => {
     if (nullable(r1)) ALT(SEQ((der(c, r1)), r2), der(c, r2))
     else SEQ(der(c, r1), r2)
   }
-  case STAR(r1) => SEQ(der(c, r1), STAR(r1))
-  case NTIMES(r1, i) =>
-    if (i == 0) ZERO else der(c, SEQ(r1, NTIMES(r1, i - 1)))
+  case STAR(r) => SEQ(der(c, r), STAR(r))
+  case CHARSET(x) => der(c, CFUN(x))
+  case PLUS(r) => SEQ(der(c, r), STAR(r))
+  case OPT(r) => der(c, r)
+  case NTIMES(r, n) => (r, n) match {
+    case (r, 0) => ZERO
+    case (r, 1) => der(c, r)
+    case (r, n) => SEQ(der(c, r), NTIMES(r, n - 1))
+  }
+  case UPTO(r, n) => (r, n) match {
+    case (r, 0) => ZERO
+    case (r, 1) => der(c, r)
+    case (r, n) => SEQ(der(c, r), UPTO(r, n - 1))
+  }
+  case ATLEAST(r, n) => SEQ(der(c, r), ATLEAST(r, n - 1))
+  case BETWEEN(r, n, m) => (r, n, m) match {
+    case (_, _, 0) => ZERO
+    case (_, _, 1) => der(c, r)
+    case (r, 0, m) => SEQ(der(c, r), BETWEEN(r, 0, m - 1))
+    case (r, n, m) => SEQ(der(c, r), BETWEEN(r, n - 1, m - 1))
+  }
+  case NOT(r) => NOT(der(c, r))
+  case CFUN(f) => if (f(c)) ONE else ZERO
+  case ALL => der(c, CFUN((x: Char) => true))
 }
 
+// simplification rules for regexes
 def simp(r: Rexp): Rexp = r match {
   case ALT(r1, r2) => (simp(r1), simp(r2)) match {
     case (ZERO, r2s) => r2s
@@ -75,15 +118,29 @@ def simp(r: Rexp): Rexp = r match {
   case r => r
 }
 
+// derivative of a regex w.r.t. a string
 def ders (s: List[Char], r: Rexp): Rexp = s match {
   case Nil => r
   case c::cs => ders(cs, simp(der(c, r)))
 }
 
-def matcher(r: Rexp, s: String): Boolean = nullable(ders(s.toList, r))
+// faster than ders in most cases
+def ders2(s: List[Char], r: Rexp): Rexp = (s, r) match {
+  case (Nil, r) => r
+  case (s, ZERO) => ZERO
+  case (s, ONE) => if (s == Nil) ONE else ZERO
+  case (s, CHAR(c)) => if (s == List(c)) ONE else 
+                       if (s == Nil) CHAR(c) else ZERO
+  case (s, ALT(r1, r2)) => ALT(ders2(s, r1), ders2(s, r2))
+  case (c::s, r) => ders2(s, simp(der(c, r)))
+}
 
+// a regex matches a string <=> ders(string, regex) matches the empty string
+def matcher(r: Rexp, s: String): Boolean = nullable(ders2(s.toList, r))
+
+// replace matched string with a different string
 def replace(r: Rexp, s1: String, s2: String): String = {
-  if (!s1.isEmpty){
+  if (!s1.isEmpty) {
     val test = (for (j <- (1 to s1.length).reverse; if (matcher(r, s1.substring(0, j)))) yield s1.substring(0, j))
 
     if (!test.isEmpty) {
@@ -98,25 +155,23 @@ def replace(r: Rexp, s1: String, s2: String): String = {
   }
 }
 
+// examples
+// the evil regex
 val EVIL = SEQ(STAR(STAR(CHAR('a'))), CHAR('b'))
-val TESTNTIMES = NTIMES(CHAR('a'), 5)
-val TESTNTIMESZERO = NTIMES(CHAR('a'), 0)
 println(matcher(EVIL, "a" * 1000 ++ "b"))
-println(!matcher(EVIL, "a" * 1000))
-println(!matcher(TESTNTIMES, ""))
-println(matcher(TESTNTIMES, "a" * 5))
-println(!matcher(TESTNTIMES, "a" * 6))
-println(matcher(TESTNTIMESZERO, ""))
-println(!matcher(TESTNTIMESZERO, "a" * 10))
 
-def time_needed[T](i: Int, code: => T) = {
-  val start = System.nanoTime()
-  for (j <- 1 to i) code
-  val end = System.nanoTime()
-  (end - start)/(i * 1.0e9)
-}
+// email regex
+val domainBeginCharset = (('a' to 'z') ++ ('0' to '9')).toSet + '.' + '-'
+val domainEndCharset = ('a' to 'z').toSet + '.'
+val localPartCharset = domainBeginCharset + '_'
 
-for (i <- 1 to 5000001 by 500000) {
-  println(i + " " + "%.5f".format(time_needed(2, matcher(EVIL, "a" * i))))
-}
+val LOCALPART = PLUS(CHARSET(localPartCharset))
+val DOMAINBEGIN = PLUS(CHARSET(domainBeginCharset))
+val DOMAINEND = BETWEEN(CHARSET(domainEndCharset), 2, 6)
+val DOMAIN = DOMAINBEGIN ~ CHAR('.') ~ DOMAINEND
+val EMAIL = LOCALPART ~ CHAR('@') ~ DOMAIN
+
+println(matcher(EMAIL, "alice@gmail.com"))
+println(replace("alice", "alice@gmail.com", "bob"))
+println(ders2("john@gmail.com".toList, EMAIL))
 
