@@ -139,20 +139,18 @@ def ders2(s: List[Char], r: Rexp): Rexp = (s, r) match {
 def matcher(r: Rexp, s: String): Boolean = nullable(ders2(s.toList, r))
 
 // replace matched string with a different string
-def replace(r: Rexp, s1: String, s2: String): String = {
-  if (!s1.isEmpty) {
-    val test = (for (j <- (1 to s1.length).reverse; if (matcher(r, s1.substring(0, j)))) yield s1.substring(0, j))
-
-    if (!test.isEmpty) {
-      s2 + replace(r, s1.substring(test(0).length, s1.length), s2)
-    }
-    else {
-      s1.substring(0, 1) + replace(r, s1.substring(1, s1.length), s2)
-    }
+// uses recursive, naive string search
+def replace(r: Rexp, text: String, word: String): String = {
+  if (!text.isEmpty) {
+    // check if the leftmost part of the string is matched by regex
+    // first check entire text, then drop rightmost chars one by one
+    val matches = (for (j <- 0 to text.length; if (matcher(r, text.dropRight(j)))) yield text.dropRight(j))
+    // if match found, replace match and check the dropped, rightmost part too
+    // else drop leftmost char and check again
+    if (!matches.isEmpty) word + replace(r, text.substring(matches.head.length, text.length), word)
+    else text.head + replace(r, text.tail, word)
   }
-  else {
-    ""
-  }
+  else ""
 }
 
 // examples
@@ -172,6 +170,6 @@ val DOMAIN = DOMAINBEGIN ~ CHAR('.') ~ DOMAINEND
 val EMAIL = LOCALPART ~ CHAR('@') ~ DOMAIN
 
 println(matcher(EMAIL, "alice@gmail.com"))
-println(replace("alice", "alice@gmail.com", "bob"))
+println(replace("alice", "123.alice@gmail.com", "bob"))
 println(ders2("john@gmail.com".toList, EMAIL))
 
