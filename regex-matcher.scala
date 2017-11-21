@@ -158,18 +158,20 @@ def replace(r: Rexp, text: String, word: String): String = {
 val EVIL = SEQ(STAR(STAR(CHAR('a'))), CHAR('b'))
 println(matcher(EVIL, "a" * 1000 ++ "b"))
 
-// email regex
+// email regex, find and replace
 val domainBeginCharset = (('a' to 'z') ++ ('0' to '9')).toSet + '.' + '-'
 val domainEndCharset = ('a' to 'z').toSet + '.'
 val localPartCharset = domainBeginCharset + '_'
-
 val LOCALPART = PLUS(CHARSET(localPartCharset))
 val DOMAINBEGIN = PLUS(CHARSET(domainBeginCharset))
 val DOMAINEND = BETWEEN(CHARSET(domainEndCharset), 2, 6)
 val DOMAIN = DOMAINBEGIN ~ CHAR('.') ~ DOMAINEND
 val EMAIL = LOCALPART ~ CHAR('@') ~ DOMAIN
 
+// is the string an email?
 println(matcher(EMAIL, "alice@gmail.com"))
+// find the pattern "alice" and replace it in the email with "bob"
 println(replace("alice", "123.alice@gmail.com", "bob"))
+// final derivative of the email, before it's tested with nullable
 println(ders2("john@gmail.com".toList, EMAIL))
 
